@@ -1,0 +1,57 @@
+services:
+  db:
+    image: mysql:8
+    container_name: mysql-db
+    env_file: .env
+    networks:
+      backend:
+        ipv4_address: 172.20.0.10
+    restart: always
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    container_name: fastapi-app
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      backend:
+        ipv4_address: 172.20.0.5
+    restart: unless-stopped
+    env_file: .env
+
+  reverse-proxy:
+    image: haproxy
+    restart: always
+    networks:
+      backend: {}
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./haproxy/reverse/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:rw
+
+  ingress-proxy:
+    image: nginx:latest
+    restart: always
+    network_mode: host
+    volumes:
+      - ./nginx/ingress/default.conf:/etc/nginx/conf.d/default.conf:rw
+      - ./nginx/ingress/nginx.conf:/etc/nginx/nginx.conf:rw
+
+volumes:
+  mysql_data:
+
+networks:
+  backend:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
